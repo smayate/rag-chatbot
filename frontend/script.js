@@ -28,6 +28,9 @@ function setupEventListeners() {
     chatInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') sendMessage();
     });
+
+    // New chat button
+    document.getElementById('newChatBtn').addEventListener('click', createNewSession);
     
     
     // Suggested questions
@@ -122,10 +125,18 @@ function addMessage(content, type, sources = null, isWelcome = false) {
     let html = `<div class="message-content">${displayContent}</div>`;
     
     if (sources && sources.length > 0) {
+        const seen = new Set();
+        const sourceLinks = sources
+            .filter(s => { const key = s.label; if (seen.has(key)) return false; seen.add(key); return true; })
+            .map(s =>
+                s.link
+                    ? `<a href="${s.link}" target="_blank" rel="noopener noreferrer">&#128279; ${s.label}</a>`
+                    : `<span>${s.label}</span>`
+            ).join('');
         html += `
             <details class="sources-collapsible">
-                <summary class="sources-header">Sources</summary>
-                <div class="sources-content">${sources.join(', ')}</div>
+                <summary>Sources</summary>
+                <div class="sources-content">${sourceLinks}</div>
             </details>
         `;
     }
@@ -147,6 +158,9 @@ function escapeHtml(text) {
 // Removed removeMessage function - no longer needed since we handle loading differently
 
 async function createNewSession() {
+    if (currentSessionId) {
+        await fetch(`${API_URL}/session/${currentSessionId}`, { method: 'DELETE' }).catch(() => {});
+    }
     currentSessionId = null;
     chatMessages.innerHTML = '';
     addMessage('Welcome to the Course Materials Assistant! I can help you with questions about courses, lessons and specific content. What would you like to know?', 'assistant', null, true);
