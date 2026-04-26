@@ -4,36 +4,55 @@ const API_URL = '/api';
 // Global state
 let currentSessionId = null;
 
-// DOM elements
+// DOM elements (set in _setDomRefs)
 let chatMessages, chatInput, sendButton, totalCourses, courseTitles;
 
-// Initialize
-document.addEventListener('DOMContentLoaded', () => {
-    // Get DOM elements after page loads
+// Separate DOM ref setup from full init so tests can wire up the DOM without
+// triggering async side-effects (createNewSession / loadCourseStats).
+function _setDomRefs() {
     chatMessages = document.getElementById('chatMessages');
     chatInput = document.getElementById('chatInput');
     sendButton = document.getElementById('sendButton');
     totalCourses = document.getElementById('totalCourses');
     courseTitles = document.getElementById('courseTitles');
-    
+}
+
+// Resets all module-level state; used by tests between cases.
+function _resetForTest() {
+    currentSessionId = null;
+    chatMessages = null;
+    chatInput = null;
+    sendButton = null;
+    totalCourses = null;
+    courseTitles = null;
+}
+
+// Directly set the session ID; used by tests that need a pre-existing session.
+function _setSessionId(id) {
+    currentSessionId = id;
+}
+
+function init() {
+    _setDomRefs();
     setupEventListeners();
     createNewSession();
     loadCourseStats();
-});
+}
+
+// Auto-initialize only in browser, not during Vitest runs.
+if (!import.meta.env?.TEST) {
+    document.addEventListener('DOMContentLoaded', init);
+}
 
 // Event Listeners
 function setupEventListeners() {
-    // Chat functionality
     sendButton.addEventListener('click', sendMessage);
     chatInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') sendMessage();
     });
 
-    // New chat button
     document.getElementById('newChatBtn').addEventListener('click', createNewSession);
-    
-    
-    // Suggested questions
+
     document.querySelectorAll('.suggested-item').forEach(button => {
         button.addEventListener('click', (e) => {
             const question = e.target.getAttribute('data-question');
@@ -49,15 +68,12 @@ async function sendMessage() {
     const query = chatInput.value.trim();
     if (!query) return;
 
-    // Disable input
     chatInput.value = '';
     chatInput.disabled = true;
     sendButton.disabled = true;
 
-    // Add user message
     addMessage(query, 'user');
 
-    // Add loading message - create a unique container for it
     const loadingMessage = createLoadingMessage();
     chatMessages.appendChild(loadingMessage);
     chatMessages.scrollTop = chatMessages.scrollHeight;
@@ -77,18 +93,15 @@ async function sendMessage() {
         if (!response.ok) throw new Error('Query failed');
 
         const data = await response.json();
-        
-        // Update session ID if new
+
         if (!currentSessionId) {
             currentSessionId = data.session_id;
         }
 
-        // Replace loading message with response
         loadingMessage.remove();
         addMessage(data.answer, 'assistant', data.sources);
 
     } catch (error) {
-        // Replace loading message with error
         loadingMessage.remove();
         addMessage(`Error: ${error.message}`, 'assistant');
     } finally {
@@ -118,12 +131,11 @@ function addMessage(content, type, sources = null, isWelcome = false) {
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${type}${isWelcome ? ' welcome-message' : ''}`;
     messageDiv.id = `message-${messageId}`;
-    
-    // Convert markdown to HTML for assistant messages
+
     const displayContent = type === 'assistant' ? marked.parse(content) : escapeHtml(content);
-    
+
     let html = `<div class="message-content">${displayContent}</div>`;
-    
+
     if (sources && sources.length > 0) {
         const seen = new Set();
         const sourceLinks = sources
@@ -140,22 +152,19 @@ function addMessage(content, type, sources = null, isWelcome = false) {
             </details>
         `;
     }
-    
+
     messageDiv.innerHTML = html;
     chatMessages.appendChild(messageDiv);
     chatMessages.scrollTop = chatMessages.scrollHeight;
-    
+
     return messageId;
 }
 
-// Helper function to escape HTML for user messages
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
 }
-
-// Removed removeMessage function - no longer needed since we handle loading differently
 
 async function createNewSession() {
     if (currentSessionId) {
@@ -166,22 +175,19 @@ async function createNewSession() {
     addMessage('Welcome to the Course Materials Assistant! I can help you with questions about courses, lessons and specific content. What would you like to know?', 'assistant', null, true);
 }
 
-// Load course statistics
 async function loadCourseStats() {
     try {
         console.log('Loading course stats...');
         const response = await fetch(`${API_URL}/courses`);
         if (!response.ok) throw new Error('Failed to load course stats');
-        
+
         const data = await response.json();
         console.log('Course data received:', data);
-        
-        // Update stats in UI
+
         if (totalCourses) {
             totalCourses.textContent = data.total_courses;
         }
-        
-        // Update course titles
+
         if (courseTitles) {
             if (data.course_titles && data.course_titles.length > 0) {
                 courseTitles.innerHTML = data.course_titles
@@ -191,10 +197,9 @@ async function loadCourseStats() {
                 courseTitles.innerHTML = '<span class="no-courses">No courses available</span>';
             }
         }
-        
+
     } catch (error) {
         console.error('Error loading course stats:', error);
-        // Set default values on error
         if (totalCourses) {
             totalCourses.textContent = '0';
         }
@@ -203,3 +208,17 @@ async function loadCourseStats() {
         }
     }
 }
+
+export {
+    escapeHtml,
+    addMessage,
+    createLoadingMessage,
+    createNewSession,
+    loadCourseStats,
+    sendMessage,
+    setupEventListeners,
+    init,
+    _setDomRefs,
+    _resetForTest,
+    _setSessionId,
+};
