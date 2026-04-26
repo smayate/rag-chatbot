@@ -1,11 +1,11 @@
-// API base URL - use relative path to work from any host
 const API_URL = '/api';
+const MAX_INPUT_CHARS = 2000;
 
-// Global state
 let currentSessionId = null;
+let currentAbortController = null;
 
 // DOM elements (set in _setDomRefs)
-let chatMessages, chatInput, sendButton, totalCourses, courseTitles;
+let chatMessages, chatInput, sendButton, totalCourses, courseTitles, charCounter;
 
 // Theme helpers
 function getTheme() {
@@ -35,16 +35,19 @@ function _setDomRefs() {
     sendButton = document.getElementById('sendButton');
     totalCourses = document.getElementById('totalCourses');
     courseTitles = document.getElementById('courseTitles');
+    charCounter = document.getElementById('charCounter');
 }
 
 // Resets all module-level state; used by tests between cases.
 function _resetForTest() {
     currentSessionId = null;
+    currentAbortController = null;
     chatMessages = null;
     chatInput = null;
     sendButton = null;
     totalCourses = null;
     courseTitles = null;
+    charCounter = null;
 }
 
 // Directly set the session ID; used by tests that need a pre-existing session.
@@ -64,11 +67,19 @@ if (!import.meta.env?.TEST) {
     document.addEventListener('DOMContentLoaded', init);
 }
 
-// Event Listeners
 function setupEventListeners() {
     sendButton.addEventListener('click', sendMessage);
-    chatInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') sendMessage();
+
+    chatInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    });
+
+    chatInput.addEventListener('input', () => {
+        autoResizeInput();
+        updateCharCounter();
     });
 
     document.getElementById('newChatBtn').addEventListener('click', createNewSession);
@@ -81,18 +92,38 @@ function setupEventListeners() {
         button.addEventListener('click', (e) => {
             const question = e.target.getAttribute('data-question');
             chatInput.value = question;
+            autoResizeInput();
+            updateCharCounter();
             sendMessage();
         });
     });
 }
 
+function autoResizeInput() {
+    chatInput.style.height = 'auto';
+    chatInput.style.height = Math.min(chatInput.scrollHeight, 200) + 'px';
+}
 
-// Chat Functions
+function updateCharCounter() {
+    const len = chatInput.value.length;
+    const warningThreshold = Math.floor(MAX_INPUT_CHARS * 0.8);
+
+    if (len >= warningThreshold) {
+        charCounter.textContent = `${len}/${MAX_INPUT_CHARS}`;
+        charCounter.className = 'char-counter' + (len >= MAX_INPUT_CHARS ? ' error' : ' warning');
+    } else {
+        charCounter.textContent = '';
+        charCounter.className = 'char-counter';
+    }
+}
+
 async function sendMessage() {
     const query = chatInput.value.trim();
-    if (!query) return;
+    if (!query || query.length > MAX_INPUT_CHARS) return;
 
     chatInput.value = '';
+    chatInput.style.height = 'auto';
+    updateCharCounter();
     chatInput.disabled = true;
     sendButton.disabled = true;
 
@@ -102,19 +133,21 @@ async function sendMessage() {
     chatMessages.appendChild(loadingMessage);
     chatMessages.scrollTop = chatMessages.scrollHeight;
 
+    if (currentAbortController) currentAbortController.abort();
+    currentAbortController = new AbortController();
+
     try {
         const response = await fetch(`${API_URL}/query`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                query: query,
-                session_id: currentSessionId
-            })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query, session_id: currentSessionId }),
+            signal: currentAbortController.signal,
         });
 
-        if (!response.ok) throw new Error('Query failed');
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => null);
+            throw new Error(errorData?.detail || `Server error (${response.status})`);
+        }
 
         const data = await response.json();
 
@@ -126,9 +159,14 @@ async function sendMessage() {
         addMessage(data.answer, 'assistant', data.sources);
 
     } catch (error) {
+        if (error.name === 'AbortError') return;
         loadingMessage.remove();
-        addMessage(`Error: ${error.message}`, 'assistant');
+        const message = error.message.includes('Failed to fetch')
+            ? 'Network error — please check your connection and try again.'
+            : `Error: ${error.message}`;
+        addMessage(message, 'assistant');
     } finally {
+        currentAbortController = null;
         chatInput.disabled = false;
         sendButton.disabled = false;
         chatInput.focus();
@@ -191,6 +229,10 @@ function escapeHtml(text) {
 }
 
 async function createNewSession() {
+    if (currentAbortController) {
+        currentAbortController.abort();
+        currentAbortController = null;
+    }
     if (currentSessionId) {
         await fetch(`${API_URL}/session/${currentSessionId}`, { method: 'DELETE' }).catch(() => {});
     }
@@ -201,12 +243,10 @@ async function createNewSession() {
 
 async function loadCourseStats() {
     try {
-        console.log('Loading course stats...');
         const response = await fetch(`${API_URL}/courses`);
         if (!response.ok) throw new Error('Failed to load course stats');
 
         const data = await response.json();
-        console.log('Course data received:', data);
 
         if (totalCourses) {
             totalCourses.textContent = data.total_courses;
@@ -215,7 +255,7 @@ async function loadCourseStats() {
         if (courseTitles) {
             if (data.course_titles && data.course_titles.length > 0) {
                 courseTitles.innerHTML = data.course_titles
-                    .map(title => `<div class="course-title-item">${title}</div>`)
+                    .map(title => `<div class="course-title-item">${escapeHtml(title)}</div>`)
                     .join('');
             } else {
                 courseTitles.innerHTML = '<span class="no-courses">No courses available</span>';
@@ -223,10 +263,7 @@ async function loadCourseStats() {
         }
 
     } catch (error) {
-        console.error('Error loading course stats:', error);
-        if (totalCourses) {
-            totalCourses.textContent = '0';
-        }
+        if (totalCourses) totalCourses.textContent = '0';
         if (courseTitles) {
             courseTitles.innerHTML = '<span class="error">Failed to load courses</span>';
         }
@@ -241,6 +278,8 @@ export {
     loadCourseStats,
     sendMessage,
     setupEventListeners,
+    autoResizeInput,
+    updateCharCounter,
     init,
     _setDomRefs,
     _resetForTest,

@@ -43,7 +43,7 @@
             <!-- Left Sidebar -->
             <aside class="sidebar">
                 <!-- New Chat Button -->
-                <button id="newChatBtn" class="new-chat-btn">New Chat</button>
+                <button id="newChatBtn" class="new-chat-btn" aria-label="Start a new chat session">New Chat</button>
 
                 <!-- Course Stats -->
                 <div class="sidebar-section">
@@ -80,15 +80,27 @@
             <!-- Main Chat Area -->
             <main class="chat-main">
                 <div class="chat-container">
-                    <div id="chatMessages" class="chat-messages"></div>
+                    <div
+                        id="chatMessages"
+                        class="chat-messages"
+                        role="log"
+                        aria-live="polite"
+                        aria-label="Chat conversation"
+                    ></div>
                     <div class="chat-input-container">
-                        <input 
-                            type="text" 
-                            id="chatInput" 
-                            placeholder="Ask about courses, lessons, or specific content..."
-                            autocomplete="off"
-                        >
-                        <button id="sendButton">
+                        <div class="input-wrapper">
+                            <textarea
+                                id="chatInput"
+                                placeholder="Ask about courses, lessons, or specific content… (Shift+Enter for newline)"
+                                autocomplete="off"
+                                spellcheck="true"
+                                rows="1"
+                                aria-label="Chat message input"
+                                maxlength="2000"
+                            ></textarea>
+                            <span id="charCounter" class="char-counter" aria-live="polite"></span>
+                        </div>
+                        <button id="sendButton" aria-label="Send message">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <line x1="22" y1="2" x2="11" y2="13"></line>
                                 <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>

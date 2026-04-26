@@ -506,6 +506,7 @@ header h1 {
 /* Chat Input Container */
 .chat-input-container {
     display: flex;
+    align-items: flex-end;
     gap: 0.75rem;
     padding: 1.5rem 2rem;
     background: var(--background);
@@ -513,16 +514,29 @@ header h1 {
     flex-shrink: 0;
 }
 
-/* Chat Input */
-#chatInput {
+/* Input wrapper holds textarea + char counter */
+.input-wrapper {
     flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Chat Input (textarea) */
+#chatInput {
+    width: 100%;
     padding: 0.875rem 1.25rem;
     background: var(--surface);
     border: 1px solid var(--border-color);
     border-radius: 24px;
     color: var(--text-primary);
     font-size: 0.95rem;
-    transition: all 0.2s ease;
+    font-family: inherit;
+    line-height: 1.5;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    resize: none;
+    min-height: 46px;
+    max-height: 200px;
+    overflow-y: auto;
 }
 
 #chatInput:focus {
@@ -533,6 +547,24 @@ header h1 {
 
 #chatInput::placeholder {
     color: var(--text-secondary);
+}
+
+/* Character counter */
+.char-counter {
+    font-size: 0.7rem;
+    color: transparent;
+    text-align: right;
+    padding: 0.2rem 0.75rem 0;
+    min-height: 1rem;
+    transition: color 0.2s ease;
+}
+
+.char-counter.warning {
+    color: #f59e0b;
+}
+
+.char-counter.error {
+    color: #ef4444;
 }
 
 /* Send Button */
@@ -866,6 +898,7 @@ details[open] .suggested-header::before {
     .chat-input-container {
         padding: 1rem;
         gap: 0.5rem;
+        align-items: flex-end;
     }
     
     #chatInput {
